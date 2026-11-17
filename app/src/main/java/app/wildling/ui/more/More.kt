@@ -167,10 +167,47 @@ fun SettingsPage(d: Data, nav: Nav) {
         }
         Section(tr("Подсказки", "Hints"))
         Row2(tr("Показать знакомство с экранами заново", "Show the screen introductions again"), null) { c.write { settings.update { it.copy(seen = emptySet()) }; say(tr("Подсказки вернутся", "Hints will come back")) } }
+        Section(tr("Поддержать", "Support"))
+        Text(tr("StillCraft держится на поддержке тех, кому нравятся эти приложения.", "StillCraft lives on the goodwill of people who like these apps."), style = T.small)
+        Link("heart", tr("Поддержать разработку", "Support development"), null, Community.SUPPORT)
+        Section("StillCraft")
+        Text(tr("Wildling – одно из небольших приложений StillCraft.", "Wildling is one of the small StillCraft apps."), style = T.small)
+        Link("bell", tr("Сообщество в Telegram", "Telegram community"), tr("новости, обсуждения, другие приложения", "news, talk and the other apps"), Community.CHAT)
+        Link("candle", tr("Сообщить об ошибке", "Report a bug"), tr("через бота StillCraft", "through the StillCraft bot"), Community.BUG)
+        Link("star", tr("Предложить идею", "Suggest an idea"), null, Community.IDEA)
+        Link("lantern", tr("Следить за обновлениями", "Follow updates"), tr("бот напишет, когда выйдет новая версия", "the bot writes when a new version is out"), Community.FOLLOW)
+        Link("lodge", tr("Все приложения StillCraft", "All StillCraft apps"), null, Community.SITE)
+        Link("scroll", tr("Исходный код", "Source code"), "GitHub", Community.CODE)
         Section(tr("О приложении", "About"))
         Text(tr("Wildling – приручение привычек. Всё хранится только на телефоне: без аккаунтов, рекламы и интернета.",
             "Wildling – taming habits. Everything stays on the phone: no accounts, no ads, no internet."), style = T.small)
         Text("v" + app.wildling.BuildConfig.VERSION_NAME, style = T.tiny, modifier = Modifier.padding(top = 4.dp), textAlign = TextAlign.Start)
         Spacer(Modifier.width(1.dp))
+    }
+}
+
+/** Where the community lives: the StillCraft bot links carry the app's slug. */
+object Community {
+    private const val BOT = "https://t.me/ArcaneWhisperBot?start="
+    const val SLUG = "wildling"
+    const val BUG = "${BOT}bug_$SLUG"
+    const val IDEA = "${BOT}wish_$SLUG"
+    const val FOLLOW = "${BOT}f_$SLUG"
+    const val CHAT = "https://t.me/+Q4gFEDk8O842OGVi"
+    const val SUPPORT = "https://bigdevwhale.github.io/stillcraft/support/"
+    const val SITE = "https://bigdevwhale.github.io/stillcraft/"
+    const val CODE = "https://github.com/bigdevwhale/wildlings"
+}
+
+/** A row that opens a link: a pixel icon, a title and a line under it. */
+@Composable
+private fun Link(icon: String, title: String, sub: String?, url: String) {
+    val ctx = LocalContext.current
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp).card().clickable {
+        runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+    }.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        app.wildling.ui.art.Ico(icon, 30.dp)
+        Column(Modifier.weight(1f).padding(start = 12.dp)) { Text(title, style = T.bodyB); if (sub != null) Text(sub, style = T.small) }
+        Text("›", style = T.h2.copy(color = C.mute))
     }
 }
