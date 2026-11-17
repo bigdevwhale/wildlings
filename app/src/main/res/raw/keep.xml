@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Creature, item, prop, icon, cloud and scene pictures are looked up by name at run time; the shrinker must keep them. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_launcher_fg,@drawable/pet_*,@drawable/item_*,@drawable/prop_*,@drawable/ic_*,@drawable/cloud_*,@drawable/yard_bg,@drawable/house_bg" />

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <include domain="database" path="wildling.db" />
+    <include domain="file" path="datastore/wildling.preferences_pb" />
+    <include domain="file" path="photos/" />
+</full-backup-content>
