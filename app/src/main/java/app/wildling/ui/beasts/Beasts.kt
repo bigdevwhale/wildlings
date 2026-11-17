@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -203,6 +204,9 @@ fun HabitPage(id: Long, d: Data, nav: Nav) {
     val h = d.byId[id] ?: run { nav.pop(); return }
     val trust = d.trust[h.id] ?: Engine.trust(h, d.marks, d.urges, d.today)
     val k = Kinds.of(h.kind)
+    // a counted habit: the day being put in, its sheet over the whole page (not inside the scrolling one)
+    var logDay by remember { mutableStateOf<Long?>(null) }
+    Box(Modifier.fillMaxSize()) {
     Page(h.name, { nav.pop() }, action = {
         Text(tr("Открытка", "Card"), style = T.smallB.copy(color = C.acc), modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { nav.share = "habit:${h.id}" }.padding(10.dp))
         Text(tr("Изменить", "Edit"), style = T.smallB.copy(color = C.acc), modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { nav.push(Screen.Edit(h.id)) }.padding(10.dp)) }) {
@@ -228,14 +232,16 @@ fun HabitPage(id: Long, d: Data, nav: Nav) {
             ))
         } else {
             app.wildling.ui.components.PixTiles(listOf(
-                Triple("${Engine.thisWeek(h, d.marks, d.today)}/${h.perWeek}", tr("на этой неделе", "this week"), "star"),
+                if (h.counts && !h.weekly) Triple("${Engine.amount(h, d.marks, d.today)}/${h.goal}", tr("${h.unit} сегодня".trim(), "${h.unit} today".trim()), "star")
+                else Triple(Engine.weekText(h, d.marks, d.today), if (h.counts) tr("${h.unit} за неделю".trim(), "${h.unit} this week".trim()) else tr("на этой неделе", "this week"), "star"),
                 Triple(count(Engine.weeksInRow(h, d.marks, d.today), "нед.", "нед.", "нед.", "wk", "wks"), tr("подряд по плану", "in a row on plan"), "candle"),
-                Triple(fmt(Engine.dones(h, d.marks).size), tr("раз всего", "times in all"), "heart"),
+                if (h.counts) Triple(fmt(Engine.amount(h, d.marks, h.since, d.today)), tr("${h.unit} всего".trim(), "${h.unit} in all".trim()), "heart")
+                else Triple(fmt(Engine.dones(h, d.marks).size), tr("раз всего", "times in all"), "heart"),
                 Triple(app.wildling.domain.fmtDayShort(h.since), tr("начало", "started"), "sign"),
             ))
         }
         Section(tr("Две недели", "Two weeks"))
-        Fortnight(h, d)
+        Fortnight(h, d) { logDay = it }
         if (trust.history.size > 3) {
             Section(tr("Доверие", "Trust"))
             Column(Modifier.fillMaxWidth().card(18.dp).padding(14.dp)) {
@@ -270,6 +276,8 @@ fun HabitPage(id: Long, d: Data, nav: Nav) {
         Spacer(Modifier.height(8.dp))
         Text(k.about, style = T.small, modifier = Modifier.padding(top = 8.dp))
     }
+    logDay?.let { day -> app.wildling.ui.home.AmountSheet(h, d, day) { logDay = null } }
+    }
 }
 
 /** The creature big, with the poses it has shown so far as buttons. */
@@ -301,7 +309,7 @@ private fun Poses(kind: String, best: Int, stage: Int, shiny: Boolean, all: Bool
 
 /** The last fourteen days: tap a day to mark or unmark it. */
 @Composable
-private fun Fortnight(h: Habit, d: Data) {
+private fun Fortnight(h: Habit, d: Data, onLog: (Long) -> Unit) {
     val c = LocalContext.current.container
     Column(Modifier.fillMaxWidth().card(18.dp).padding(12.dp)) {
         listOf(13L downTo 7L, 6L downTo 0L).forEach { span ->
@@ -312,15 +320,19 @@ private fun Fortnight(h: Habit, d: Data) {
                     val on = if (h.bad) d.slipped(h, day) else d.done(h, day)
                     val col = when { before -> C.track; h.bad && on -> C.bad; h.bad -> C.acc; on -> C.gold; else -> C.track }
                     Column(Modifier.weight(1f).aspectRatio(.8f).clip(RoundedCornerShape(10.dp)).background(col.copy(alpha = if (before) .5f else if (on || h.bad) .85f else 1f))
-                        .clickable(enabled = !before) { c.write { if (h.bad) { if (on) unslip(h, day) else slip(h, day) } else toggleDone(h, day) } },
+                        .clickable(enabled = !before) { if (h.counts) onLog(day) else c.write { if (h.bad) { if (on) unslip(h, day) else slip(h, day) } else toggleDone(h, day) } },
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         Text(dayShort((java.time.LocalDate.ofEpochDay(day).dayOfWeek.value - 1)), style = T.tiny.copy(color = if (before || (!h.bad && !on)) C.mute else Color.White))
                         Text("${java.time.LocalDate.ofEpochDay(day).dayOfMonth}", style = T.smallB.copy(color = if (before || (!h.bad && !on)) C.mute else Color.White))
+                        if (h.counts && !before) Engine.amount(h, d.marks, day).takeIf { it > 0 }?.let { a ->
+                            Text(fmt(a), style = T.tiny.copy(color = if (on) Color.White else C.gold), maxLines = 1)
+                        }
                     }
                 }
             }
         }
         Text(if (h.bad) tr("Зелёный – без зверя, красный – было. Нажми на день, чтобы поправить.", "Green – clean, red – it happened. Tap a day to fix it.")
+            else if (h.counts) tr("Нажми на день, чтобы вписать, сколько было.", "Tap a day to put in how much.")
             else tr("Нажми на день, чтобы отметить, что привычка была.", "Tap a day to mark the habit done."), style = T.tiny, modifier = Modifier.padding(top = 6.dp))
     }
 }

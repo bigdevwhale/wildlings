@@ -222,7 +222,7 @@ private fun Lane(h: Habit, d: Data, nav: Nav) {
             fmt(Engine.slips(h, d.marks).size) to tr("срывов", "slips"),
             d.urges.filter { it.habitId == h.id }.let { u -> "${u.count { it.held }}/${u.size}" } to tr("тяг", "cravings"),
         ) else listOf(
-            "${Engine.thisWeek(h, d.marks, d.today)}/${h.perWeek}" to tr("неделя", "week"),
+            Engine.weekText(h, d.marks, d.today) to tr("неделя", "week"),
             fmt(Engine.weeksInRow(h, d.marks, d.today)) to tr("нед. подряд", "wks in row"),
             fmt(Engine.dones(h, d.marks).size) to tr("всего", "in all"),
             "${rate(h, d)}%" to tr("по плану", "on plan"),
@@ -236,6 +236,8 @@ private fun Lane(h: Habit, d: Data, nav: Nav) {
 /** A good habit: how many of its planned days, since it began, were done. */
 private fun rate(h: Habit, d: Data): Int {
     val weeks = ((d.today - h.since + 1) / 7.0).coerceAtLeast(1.0)
+    // so much a week: how much of the weeks' amounts was done
+    if (h.counts && h.weekly) return (Engine.amount(h, d.marks, h.since, d.today) / (weeks * h.goal) * 100).roundToInt().coerceAtMost(100)
     return (Engine.dones(h, d.marks).size / (weeks * h.perWeek) * 100).roundToInt().coerceAtMost(100)
 }
 

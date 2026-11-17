@@ -49,6 +49,7 @@ import app.wildling.domain.Moods
 import app.wildling.domain.Stages
 import app.wildling.domain.count
 import app.wildling.domain.fmt
+import app.wildling.domain.weekStart
 import app.wildling.domain.tr
 import app.wildling.ui.Data
 import app.wildling.ui.Nav
@@ -70,6 +71,9 @@ import app.wildling.ui.theme.C
 import app.wildling.ui.theme.T
 import kotlinx.coroutines.launch
 
+/** «5 стаканов», or just «5» when the habit names no unit. */
+fun Habit.ofUnit(n: Any) = if (unit.isBlank()) "$n" else "$n $unit"
+
 /** The habit's own words, or its kind's. */
 fun Habit.label() = title.ifBlank { Kinds.of(kind).habit }
 
@@ -80,6 +84,7 @@ fun days(n: Long) = if (n <= 0) tr("первый день", "day one") else coun
 fun subline(h: Habit, d: Data): String {
     val st = Stages.name(d.trust[h.id]?.stage ?: 0, h.bad)
     return if (h.bad) tr("${days(Engine.streak(h, d.marks, d.today)).replaceFirstChar { it.uppercase() }} без · $st", "${days(Engine.streak(h, d.marks, d.today)).replaceFirstChar { it.uppercase() }} clean · $st")
+    else if (h.counts && h.weekly) Engine.weekText(h, d.marks, d.today).split('/').let { (a, g) -> tr("$a из ${h.ofUnit(g)} за неделю · $st", "$a of ${h.ofUnit(g)} this week · $st") }
     else tr("${Engine.thisWeek(h, d.marks, d.today)} из ${h.perWeek} на неделе · $st", "${Engine.thisWeek(h, d.marks, d.today)} of ${h.perWeek} this week · $st")
 }
 
@@ -96,6 +101,7 @@ fun ConePill(n: Int, modifier: Modifier = Modifier, onClick: (() -> Unit)? = nul
 fun HomeScreen(d: Data, nav: Nav) {
     val c = LocalContext.current.container
     var slipFor by remember { mutableStateOf<Habit?>(null) }
+    var logFor by remember { mutableStateOf<Habit?>(null) }
     // a creature that stepped back or is new: remember quietly where it is, so only steps forward make news
     LaunchedEffect(d.trust) {
         val quiet = d.active.mapNotNull { h -> val cur = d.trust[h.id]?.stage ?: 0; val told = d.s.stages[h.id]; if (told == null || cur < told) h.id to cur else null }.toMap()
@@ -119,19 +125,20 @@ fun HomeScreen(d: Data, nav: Nav) {
                     val holding = d.bad.count { !d.slipped(it) }
                     GroupHead("paw", tr("Дикие · не кормить", "Wild · don't feed"), tr("держатся $holding из ${d.bad.size}", "holding $holding of ${d.bad.size}"), C.acc)
                 }
-                items(d.bad, key = { it.id }) { h -> HabitRow(h, d, nav, onSlip = { slipFor = h }) }
+                items(d.bad, key = { it.id }) { h -> HabitRow(h, d, nav, onSlip = { slipFor = h }, onLog = {}) }
             }
             if (d.good.isNotEmpty()) {
                 item(key = "h-good") {
                     GroupHead("heart", tr("Пугливые · приманить", "Shy · lure them"), tr("сегодня ${d.good.count { d.done(it) }} из ${d.good.size}", "today ${d.good.count { d.done(it) }} of ${d.good.size}"), C.gold)
                 }
-                items(d.good, key = { it.id }) { h -> HabitRow(h, d, nav, onSlip = {}) }
+                items(d.good, key = { it.id }) { h -> HabitRow(h, d, nav, onSlip = {}, onLog = { logFor = h }) }
             }
             item(key = "note") { NoteCard(d, nav) }
             item(key = "pad") { Spacer(Modifier.height(8.dp)) }
         }
     }
     slipFor?.let { h -> SlipSheet(h, d, onDone = { slipFor = null }) }
+    logFor?.let { h -> AmountSheet(h, d, onDone = { logFor = null }) }
 }
 
 /** The head of a group in «Today»: an icon, what to do with these creatures, and how it goes. */
@@ -146,7 +153,7 @@ private fun GroupHead(icon: String, title: String, sub: String, color: Color) {
 }
 
 @Composable
-private fun HabitRow(h: Habit, d: Data, nav: Nav, onSlip: () -> Unit) {
+private fun HabitRow(h: Habit, d: Data, nav: Nav, onSlip: () -> Unit, onLog: () -> Unit) {
     val c = LocalContext.current.container
     val tr0 = d.trust[h.id]
     val st = tr0?.stage ?: 0
@@ -172,6 +179,17 @@ private fun HabitRow(h: Habit, d: Data, nav: Nav, onSlip: () -> Unit) {
                     .clickable { c.write { unslip(h, d.today); say(tr("Отметка снята", "Mark removed")) } }.padding(horizontal = 6.dp, vertical = 2.dp))
                 else Text(tr("было?", "slipped?"), style = T.tiny.copy(color = C.mute), modifier = Modifier.padding(top = 2.dp).clip(RoundedCornerShape(6.dp)).background(C.card2)
                     .clickable(onClick = onSlip).padding(horizontal = 8.dp, vertical = 3.dp))
+            }
+        } else if (h.counts) {
+            val on = d.done(h)
+            val today = Engine.amount(h, d.marks, d.today)
+            Column(Modifier.padding(end = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(42.dp).clip(CircleShape).background(if (on) C.gold else Color.Transparent).border(2.dp, if (on) C.gold else C.line, CircleShape)
+                    .clickable(onClick = onLog), contentAlignment = Alignment.Center) {
+                    if (today > 0) Text(fmt(today), style = T.smallB.copy(color = if (on) Color.White else C.ink), maxLines = 1)
+                    else Text("+", style = T.h3.copy(color = C.mute))
+                }
+                Text(if (h.weekly) Engine.weekText(h, d.marks, d.today) else "$today/${h.goal}", style = T.tiny, modifier = Modifier.padding(top = 2.dp), maxLines = 1)
             }
         } else {
             val on = d.done(h)
@@ -222,6 +240,45 @@ fun echo(d: Data): Pair<String, String>? {
     val ago = d.today - pick.day
     return (if (n >= 1) tr("День $n, ${days(ago).let { if (ago == 7L) "неделю" else it }} назад", "Day $n, ${days(ago).let { if (ago == 7L) "a week" else it }} ago")
         else tr("${days(ago)} назад", "${days(ago)} ago")) to pick.text
+}
+
+/** A counted habit: how much was done on [day] (today by default), put in by steps or typed. */
+@Composable
+fun AmountSheet(h: Habit, d: Data, day: Long = d.today, onDone: () -> Unit) {
+    val c = LocalContext.current.container
+    val was = Engine.amount(h, d.marks, day)
+    var text by remember { mutableStateOf(if (was > 0) "$was" else "") }
+    val n = text.toIntOrNull() ?: 0
+    // a small goal goes one at a time (glasses), a big one by tenths (words)
+    val step = if (h.goal <= 20) 1 else maxOf(1, h.goal / 10).let { if (it >= 100) it / 100 * 100 else if (it >= 10) it / 10 * 10 else it }
+    Sheet(onDone) {
+        Row(verticalAlignment = Alignment.Bottom) {
+            Creature(h.kind, 0, 90.dp)
+            Column(Modifier.padding(start = 10.dp, bottom = 10.dp)) {
+                Text(h.label(), style = T.h2)
+                Text(if (h.weekly) tr("Цель – ${h.ofUnit(h.goal)} за неделю", "The goal: ${h.ofUnit(h.goal)} a week") else tr("Цель – ${h.ofUnit(h.goal)} в день", "The goal: ${h.ofUnit(h.goal)} a day"), style = T.small)
+            }
+        }
+        Text(if (day == d.today) tr("Сколько сегодня?", "How much today?") else tr("Сколько было ${app.wildling.domain.fmtDayShort(day)}?", "How much on ${app.wildling.domain.fmtDayShort(day)}?"), style = T.bodyB, modifier = Modifier.padding(top = 12.dp))
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp).card().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Ghost("−$step", small = true) { text = maxOf(0, n - step).takeIf { it > 0 }?.toString() ?: "" }
+            app.wildling.ui.components.Field(text, { v -> text = v.filter { it.isDigit() }.take(7) }, "0", Modifier.weight(1f).padding(horizontal = 8.dp), number = true, style = T.num, center = true)
+            Ghost("+$step", small = true) { text = (n + step).toString() }
+        }
+        val goalLine = if (h.weekly) {
+            val w = weekStart(day); val week = Engine.amount(h, d.marks, w, w + 6) - was + n
+            tr("За неделю: $week из ${h.ofUnit(h.goal)}", "This week: $week of ${h.ofUnit(h.goal)}") + if (week >= h.goal) " ✓" else ""
+        } else tr("$n из ${h.ofUnit(h.goal)}", "$n of ${h.ofUnit(h.goal)}") + if (n >= h.goal) " ✓" else ""
+        Text(goalLine, style = T.smallB.copy(color = C.gold), modifier = Modifier.padding(top = 8.dp))
+        Btn(tr("Записать", "Save"), Modifier.fillMaxWidth().padding(top = 14.dp)) {
+            c.write {
+                val before = Engine.amount(h, d.marks, day)
+                val done = log(h, day, n)
+                if (n > before && done) say(tr("${h.name} подходит ближе", "${h.name} comes closer"))
+            }
+            onDone()
+        }
+    }
 }
 
 @Composable

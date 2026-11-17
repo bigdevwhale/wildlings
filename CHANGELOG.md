@@ -6,6 +6,17 @@ line "<!-- tg", then 2-4 short lines in Russian for users (what is new, what is 
 then close it like any HTML comment. The release notes carry it, and the chat bot posts those lines.
 -->
 
+## [1.1.0] - 2026-11-17
+
+- **Counted habits.** A good habit can now be counted in amounts instead of ticked: «5 glasses of water a day» or «1000 words a week». Put in how much was done each day – by steps or typed – and the day (or the week) counts once the goal adds up. A weekly amount brings the creature closer in proportion: half the words, half the week's steps. ([#1](https://github.com/bigdevwhale/wildlings/issues/1))
+- The creature's page shows today's amount and the total, and its two-week calendar shows each day's amount; tap a day to put in or fix how much it was.
+
+<!-- tg
+Wildling 1.1.0: измеримые привычки – по вашей идее из чата.
+Теперь полезную привычку можно считать: «5 стаканов воды в день» или «1000 слов в неделю».
+Вписываешь, сколько было за день, – и цель закрывается, когда набирается нужное.
+-->
+
 ## [1.0.0] - 2026-11-17
 
 The first release.

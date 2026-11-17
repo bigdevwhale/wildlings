@@ -46,7 +46,12 @@ class AppContainer(context: Context) {
         if (h.id == 0L) {
             val order = (dao.habitList().maxOfOrNull { it.order } ?: -1) + 1
             dao.insert(h.copy(order = order, shiny = Random.nextInt(25) == 0))
-        } else { dao.update(h); h.id }
+        } else {
+            dao.update(h)
+            // the goal may have changed: the days with amounts are ticked again by the new one
+            if (h.counts) dao.markList().filter { it.habitId == h.id && it.kind == Mark.LOG }.forEach { syncDone(h, it.day, it.amount) }
+            h.id
+        }
     }
 
     suspend fun begin(h: Habit, currency: String) {
@@ -72,6 +77,25 @@ class AppContainer(context: Context) {
         val had = dao.markList().any { it.habitId == h.id && it.day == day && it.kind == Mark.DONE }
         if (had) dao.unmark(h.id, day, Mark.DONE) else dao.insert(Mark(habitId = h.id, day = day, kind = Mark.DONE))
         !had
+    }
+
+    /**
+     * A counted habit: how much was done on [day] in all (0 clears it). The day is ticked done by itself:
+     * once the day's goal is reached, or, for a weekly amount, once anything was done.
+     */
+    suspend fun log(h: Habit, day: Long, total: Int): Boolean = lock.withLock {
+        dao.unmark(h.id, day, Mark.LOG)
+        if (total > 0) dao.insert(Mark(habitId = h.id, day = day, kind = Mark.LOG, amount = total))
+        syncDone(h, day, total)
+    }
+
+    /** Ticks [day] of a counted habit done or not by its amount; true if it is done. */
+    private suspend fun syncDone(h: Habit, day: Long, total: Int): Boolean {
+        val should = if (h.weekly) total > 0 else total >= h.goal
+        val had = dao.markList().any { it.habitId == h.id && it.day == day && it.kind == Mark.DONE }
+        if (had && !should) dao.unmark(h.id, day, Mark.DONE)
+        if (!had && should) dao.insert(Mark(habitId = h.id, day = day, kind = Mark.DONE))
+        return should
     }
 
     /** A craving sat through by the window. Not held means the beast was fed today. */

@@ -36,6 +36,20 @@ object Engine {
                 p += .5 * minOf(2, held[d] ?: 0)
                 hist += d to p; best = max(best, Stages.of(p))
             }
+        } else if (h.counts && h.weekly) {
+            // so much a week: each amount brings its share of the week's seven steps, what goes past the goal a little more
+            val logs = mine.filter { it.kind == Mark.LOG }.associate { it.day to it.amount }
+            val goal = h.goal.toDouble()
+            var sum = 0.0
+            val firstWeek = weekStart(h.since)
+            for (d in h.since..today) {
+                if (weekStart(d) == d) sum = 0.0
+                val a = (logs[d] ?: 0).toDouble()
+                if (a > 0) { p += 7.0 * (minOf(sum + a, goal) - minOf(sum, goal)) / goal; if (sum + a > goal) p += .5; sum += a }
+                p += .5 * minOf(2, held[d] ?: 0)
+                if (weekStart(d) + 6 == d && weekStart(d) != firstWeek && d < today && sum < goal / 2) p *= WEEK_KEEP
+                hist += d to p; best = max(best, Stages.of(p))
+            }
         } else {
             val done = mine.filter { it.kind == Mark.DONE }.map { it.day }.toSet()
             val per = h.perWeek.coerceIn(1, 7)
@@ -78,14 +92,22 @@ object Engine {
     /** A good habit: weeks in a row (counting back from last week) it was done as planned; this week counts once it's met. */
     fun weeksInRow(h: Habit, marks: List<Mark>, today: Long): Int {
         val done = dones(h, marks); val per = h.perWeek.coerceIn(1, 7)
+        val met: (Long) -> Boolean = if (h.counts && h.weekly) { w -> amount(h, marks, w, w + 6) >= h.goal } else { w -> done.count { it in w..w + 6 } >= per }
         var w = weekStart(today); var n = 0
-        if (done.count { it in w..w + 6 } >= per) n++
+        if (met(w)) n++
         w -= 7
-        while (w + 6 >= h.since) { if (done.count { it in w..w + 6 } >= per) n++ else break; w -= 7 }
+        while (w + 6 >= h.since) { if (met(w)) n++ else break; w -= 7 }
         return n
     }
 
     fun thisWeek(h: Habit, marks: List<Mark>, today: Long): Int { val w = weekStart(today); return dones(h, marks).count { it in w..w + 6 } }
+
+    /** A counted habit: how much was done from [from] to [to]. */
+    fun amount(h: Habit, marks: List<Mark>, from: Long, to: Long = from): Int = marks.filter { it.habitId == h.id && it.kind == Mark.LOG && it.day in from..to }.sumOf { it.amount }
+
+    /** This week against the plan: «3/5» days, or «640/1000» of a weekly amount. */
+    fun weekText(h: Habit, marks: List<Mark>, today: Long): String =
+        if (h.counts && h.weekly) weekStart(today).let { "${amount(h, marks, it, it + 6)}/${h.goal}" } else "${thisWeek(h, marks, today)}/${h.perWeek}"
 
     /** Day 1 is the day the habit began. */
     fun dayNo(h: Habit, day: Long) = day - h.since + 1

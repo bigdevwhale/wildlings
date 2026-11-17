@@ -1,6 +1,8 @@
 package app.wildling.data
 
 import android.content.Context
+import androidx.room.AutoMigration
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -31,7 +33,14 @@ data class Habit(
     val order: Int = 0,
     val archived: Boolean = false,
     val shiny: Boolean = false,
-)
+    /** A good habit counted in amounts: the target (0 = just done or not), per day or, if [weekly], per week. */
+    @ColumnInfo(defaultValue = "0") val goal: Int = 0,
+    @ColumnInfo(defaultValue = "") val unit: String = "",   // what is counted, as said after a number: «стаканов», «слов»
+    @ColumnInfo(defaultValue = "0") val weekly: Boolean = false,
+) {
+    /** Counted in amounts rather than ticked. */
+    val counts get() = !bad && goal > 0
+}
 
 /** A day of a habit: a slip of a bad one, or a good one done. */
 @Entity
@@ -39,9 +48,11 @@ data class Mark(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val habitId: Long,
     val day: Long,
-    val kind: Int,               // SLIP or DONE
+    val kind: Int,               // SLIP, DONE or LOG
     val at: Long = System.currentTimeMillis(),
-) { companion object { const val SLIP = 1; const val DONE = 2 } }
+    /** A LOG: how much of a counted habit was done that day, in all. */
+    @ColumnInfo(defaultValue = "0") val amount: Int = 0,
+) { companion object { const val SLIP = 1; const val DONE = 2; const val LOG = 3 } }
 
 /** «It came»: a craving lived through by the window, held or not. */
 @Entity
@@ -92,7 +103,8 @@ interface Wild {
     @Query("DELETE FROM Note WHERE id = :id") suspend fun deleteNote(id: Long)
 }
 
-@Database(entities = [Habit::class, Mark::class, Urge::class, Note::class], version = 1, exportSchema = true)
+@Database(entities = [Habit::class, Mark::class, Urge::class, Note::class], version = 2, exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)])
 abstract class Db : RoomDatabase() {
     abstract fun dao(): Wild
 

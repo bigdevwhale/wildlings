@@ -85,12 +85,20 @@ class Draft(h: Habit?, bad0: Boolean, kind0: String, today: Long, val taken: Set
     var minutes by mutableStateOf(h?.minutes?.takeIf { it > 0 }?.toString() ?: "")
     var perWeek by mutableIntStateOf(h?.perWeek ?: 7)
     var why by mutableStateOf(h?.why ?: "")
+    /** A good habit counted in amounts: how much, of what, a day or a week. */
+    var counts by mutableStateOf(h?.counts ?: false)
+    var goal by mutableStateOf(h?.goal?.takeIf { it > 0 }?.toString() ?: "")
+    var unit by mutableStateOf(h?.unit ?: "")
+    var weekly by mutableStateOf(h?.weekly ?: false)
     val own get() = Kinds.of(kind).own
+    /** A counted habit needs its amount. */
+    val goalOk get() = bad || !counts || (goal.toIntOrNull() ?: 0) > 0
 }
 
 fun Draft.toHabit(old: Habit?, today: Long, fallbackName: String) = (old ?: Habit(kind = kind, bad = bad, title = "", name = "", since = today)).copy(
     kind = kind, bad = bad, title = title.trim(), name = name.trim().ifEmpty { fallbackName }, since = today - ago,
-    cost = if (bad) parseMoney(cost) ?: 0 else 0, minutes = if (bad) minutes.toIntOrNull() ?: 0 else 0, perWeek = perWeek, why = why.trim())
+    cost = if (bad) parseMoney(cost) ?: 0 else 0, minutes = if (bad) minutes.toIntOrNull() ?: 0 else 0, perWeek = if (!bad && counts && weekly) 7 else perWeek, why = why.trim(),
+    goal = if (!bad && counts) goal.toIntOrNull() ?: 0 else 0, unit = if (!bad && counts) unit.trim() else "", weekly = !bad && counts && weekly)
 
 private enum class Step { TYPE, CREATURE, NAMES, WHEN, WHY }
 
@@ -106,7 +114,7 @@ fun Wizard(f: Draft, today: Long, editing: Boolean, fallbackName: String, pickNa
     val step = steps[at]
     fun back() { if (at > 0) at-- else onCancel() }
     BackHandler { back() }
-    val canGo = step != Step.NAMES || !f.own || f.title.isNotBlank()
+    val canGo = (step != Step.NAMES || !f.own || f.title.isNotBlank()) && (step != Step.WHEN || f.goalOk)
     Column(Modifier.fillMaxSize().background(C.bg).statusBarsPadding().navigationBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (at == 0) tr("Отмена", "Cancel") else tr("Назад", "Back"), style = T.smallB.copy(color = C.mute), modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable { back() }.padding(8.dp))
@@ -130,7 +138,7 @@ fun Wizard(f: Draft, today: Long, editing: Boolean, fallbackName: String, pickNa
             }
         }
         if (step != Step.TYPE) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (editing && at < steps.lastIndex) Ghost(tr("Сохранить", "Save"), Modifier.weight(1f)) { if (canGo) onDone() }
+            if (editing && at < steps.lastIndex) Ghost(tr("Сохранить", "Save"), Modifier.weight(1f)) { if (canGo && f.goalOk) onDone() }
             val last = at == steps.lastIndex
             Btn(if (last) (if (editing) tr("Сохранить", "Save") else if (f.bad) tr("Позвать зверя", "Call the beast") else tr("Позвать зверька", "Call the creature")) else tr("Дальше", "Next"),
                 Modifier.weight(1f), enabled = canGo) { if (last) onDone() else at++ }
@@ -247,10 +255,28 @@ private fun ColumnScope.WhenStep(f: Draft, today: Long) {
             Creature(f.kind, app.wildling.ui.art.frameOf(st), 90.dp, look = if (st == 0) Look.SHADOW else if (st == 1) Look.DIM else Look.FULL)
             Text(tr("Начнёт отсюда: ", "Starts here: ") + app.wildling.domain.Stages.name(st, true).lowercase(), style = T.smallB, modifier = Modifier.padding(start = 10.dp, bottom = 16.dp))
         }
-    } else {
-        StepTitle(tr("Сколько дней в неделю?", "How many days a week?"), tr("Пугливому зверьку важна не идеальность, а регулярность. Лучше честные три, чем недостижимые семь.",
+    } else Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        StepTitle(tr("Как отмечать?", "How to keep track?"), tr("Пугливому зверьку важна не идеальность, а регулярность. Лучше честные три, чем недостижимые семь.",
             "A shy creature cares about rhythm, not perfection. An honest three beats an impossible seven."))
-        Row(Modifier.fillMaxWidth().padding(top = 22.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Chip(tr("Сделал или нет", "Done or not"), !f.counts, color = C.gold) { f.counts = false }
+            Chip(tr("Считать сколько", "Count how much"), f.counts, color = C.gold) { f.counts = true }
+        }
+        if (f.counts) {
+            Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Field(f.goal, { v -> f.goal = v.filter { it.isDigit() }.take(7) }, "5", Modifier.width(96.dp), number = true, center = true)
+                Field(f.unit, { f.unit = it.take(24) }, tr("стаканов, слов, минут", "glasses, words, minutes"), Modifier.weight(1f))
+            }
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(tr("в день", "a day"), !f.weekly, color = C.gold) { f.weekly = false }
+                Chip(tr("в неделю", "a week"), f.weekly, color = C.gold) { f.weekly = true }
+            }
+            Text(if (f.weekly) tr("Вписывай, сколько сделал за день, – цель закроется, когда за неделю наберётся нужное. Например, 1000 слов в неделю.",
+                "Put in how much you did each day – the goal is met once the week adds up. E.g. 1000 words a week.")
+            else tr("День засчитается, когда наберётся цель. Например, 5 стаканов воды в день.", "A day counts once the goal is reached. E.g. 5 glasses of water a day."),
+                style = T.tiny, modifier = Modifier.padding(top = 8.dp))
+        }
+        if (!f.counts || !f.weekly) Row(Modifier.fillMaxWidth().padding(top = 22.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             (1..7).forEach { n ->
                 val on = n <= f.perWeek
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { f.perWeek = n }.padding(4.dp)) {
@@ -260,7 +286,7 @@ private fun ColumnScope.WhenStep(f: Draft, today: Long) {
                 }
             }
         }
-        Text(when (f.perWeek) { 7 -> tr("Каждый день", "Every day"); 1 -> tr("Раз в неделю", "Once a week"); else -> tr("${f.perWeek} ${app.wildling.domain.plural(f.perWeek.toLong(), "раз", "раза", "раз")} в неделю", "${f.perWeek} times a week") },
+        if (!f.counts || !f.weekly) Text(when (f.perWeek) { 7 -> tr("Каждый день", "Every day"); 1 -> tr("Раз в неделю", "Once a week"); else -> tr("${f.perWeek} ${app.wildling.domain.plural(f.perWeek.toLong(), "раз", "раза", "раз")} в неделю", "${f.perWeek} times a week") },
             style = T.h3, modifier = Modifier.padding(top = 16.dp))
         Row(Modifier.fillMaxWidth().padding(top = 18.dp), verticalAlignment = Alignment.Bottom) {
             Creature(f.kind, 0, 90.dp)
