@@ -7,6 +7,9 @@ import android.content.pm.PackageManager
 import android.database.Cursor
 import android.net.Uri
 import android.os.Bundle
+import android.os.ParcelFileDescriptor
+import app.wildling.data.BadBackup
+import app.wildling.data.Backup
 import app.wildling.BuildConfig
 import app.wildling.WildlingApp
 import app.wildling.AppContainer
@@ -25,11 +28,15 @@ import java.time.ZoneId
  * The bridge to Lingvale, the village where the pets of all the -ling apps live together.
  *
  * Lingvale asks through ContentResolver.call() and nobody else gets an answer: the caller must be Lingvale signed
- * with its release key (a debug or demo build also answers a Lingvale built with the same debug key). It only reads;
- * nothing here changes the app's data. Protocol v1, the same in every -ling app:
+ * with its release key (a debug or demo build also answers a Lingvale built with the same debug key).
+ * Protocol v2, the same in every -ling app:
  *  - "hello"    → {v}
  *  - "snapshot" → {json}: pets, species, days of activity, the last week's events
  *  - "art"      → {bytes}: one picture from res/drawable-nodpi (pet_*, item_*, prop_*, *_bg)
+ *  - "backup"   (extras {fd}: a file open for writing) → {ok, name}: writes the same backup file the settings save
+ *  - "restore"  (extras {fd}: a file open for reading) → {ok, error}: loads such a file, as the settings' «Restore» does,
+ *    replacing what is on the phone; error is "newer" (a file from a newer version), "busy" or "bad"
+ * Only "restore" changes anything here, and Lingvale asks the player before it calls it.
  */
 class VillageProvider : ContentProvider() {
     override fun onCreate() = true
@@ -41,8 +48,38 @@ class VillageProvider : ContentProvider() {
             "hello" -> Bundle().apply { putInt("v", VERSION) }
             "snapshot" -> Bundle().apply { putString("json", runBlocking { snapshot(ctx, container(ctx)) }.toString()) }
             "art" -> art(ctx, arg)
+            "backup" -> backup(ctx, extras)
+            "restore" -> restore(ctx, extras)
             else -> null
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun fd(extras: Bundle?): ParcelFileDescriptor? = extras?.getParcelable("fd")
+
+    /** Writes the settings' backup file into the file Lingvale opened. */
+    private fun backup(ctx: Context, extras: Bundle?): Bundle {
+        val fd = fd(extras) ?: return Bundle().apply { putBoolean("ok", false) }
+        val ok = runCatching {
+            val b = runBlocking { container(ctx).backup() }
+            ParcelFileDescriptor.AutoCloseOutputStream(fd).use { Backup.write(it, b) }
+        }.onFailure { runCatching { fd.close() } }.isSuccess
+        return Bundle().apply { putBoolean("ok", ok); putString("name", "wildling.json") }
+    }
+
+    /** Loads a backup file from Lingvale, the way the settings do: all of it, or, if something fails, none of it. */
+    private fun restore(ctx: Context, extras: Bundle?): Bundle {
+        val fd = fd(extras) ?: return Bundle().apply { putBoolean("ok", false); putString("error", "bad") }
+        val error = try {
+            val b = ParcelFileDescriptor.AutoCloseInputStream(fd).use { Backup.read(it) }
+            runBlocking { container(ctx).restore(b) }
+            null
+        } catch (e: BadBackup) {
+            if (e.newer) "newer" else "bad"
+        } catch (e: Exception) {
+            runCatching { fd.close() }; "bad"
+        }
+        return Bundle().apply { putBoolean("ok", error == null); if (error != null) putString("error", error) }
     }
 
     private fun trusted(ctx: Context): Boolean {
@@ -77,7 +114,7 @@ class VillageProvider : ContentProvider() {
     override fun update(uri: Uri, values: ContentValues?, selection: String?, selectionArgs: Array<out String>?) = 0
 
     companion object {
-        const val VERSION = 1
+        const val VERSION = 2
         const val HUB = "app.lingvale"
         /** SHA-256 of Lingvale's release certificate. */
         private val HUB_CERTS = listOf(hex("CEF40A1786896D829CFA53115693AC9A53FC0349EAB84BAF64EFA648592D1ABF"))

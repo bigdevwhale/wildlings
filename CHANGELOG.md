@@ -6,6 +6,15 @@ line "<!-- tg", then 2-4 short lines in Russian for users (what is new, what is 
 then close it like any HTML comment. The release notes carry it, and the chat bot posts those lines.
 -->
 
+## [1.3.0] - 2026-11-18
+
+- **Lingvale can move Wildling to a new phone.** The village saves the copies of all the -ling apps into one file and loads them back on another phone. It is the same copy Settings → Data makes, and Wildling loads it only when you confirm it in Lingvale. A file from a newer Wildling is refused, as in the settings.
+
+<!-- tg
+Lingvale теперь умеет переносить Wildling на новый телефон: одна копия на все приложения семейства.
+Это тот же файл, что сохраняют настройки, и загружается он только с вашего согласия.
+-->
+
 ## [1.2.0] - 2026-11-18
 
 - **A copy in a file.** Settings → Data saves everything the app keeps – habits, days, cravings, the journal, the letter, the lodge and the garden – as one file, and reads it back. Move it to a new phone or keep it just in case. ([#4](https://github.com/bigdevwhale/wildlings/issues/4))

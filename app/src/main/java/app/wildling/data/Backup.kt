@@ -6,6 +6,8 @@ import app.wildling.domain.Shop
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.OutputStream
 
 /** The file is not a copy of Wildling, or ([newer]) a later version of the app made it. */
 class BadBackup(val newer: Boolean = false) : Exception()
@@ -71,16 +73,18 @@ class Backup(val habits: List<Habit>, val marks: List<Mark>, val urges: List<Urg
             }
         }
 
-        fun write(ctx: Context, uri: Uri, b: Backup) {
-            val bytes = b.json().toString().toByteArray()
-            (ctx.contentResolver.openOutputStream(uri) ?: throw java.io.IOException()).use { it.write(bytes) }
-        }
+        fun write(ctx: Context, uri: Uri, b: Backup) =
+            (ctx.contentResolver.openOutputStream(uri) ?: throw java.io.IOException()).use { write(it, b) }
 
-        fun read(ctx: Context, uri: Uri): Backup {
+        /** The file itself, wherever it goes: the settings' «Save a copy» or Lingvale's copy of the whole family. */
+        fun write(out: OutputStream, b: Backup) = out.write(b.json().toString().toByteArray())
+
+        fun read(ctx: Context, uri: Uri): Backup =
+            (ctx.contentResolver.openInputStream(uri) ?: throw java.io.IOException()).use { read(it) }
+
+        fun read(input: InputStream): Backup {
             val out = ByteArrayOutputStream(); val chunk = ByteArray(64 * 1024)
-            (ctx.contentResolver.openInputStream(uri) ?: throw java.io.IOException()).use { s ->
-                while (true) { val n = s.read(chunk); if (n < 0) break; out.write(chunk, 0, n); if (out.size() > MAX) throw BadBackup() }
-            }
+            while (true) { val n = input.read(chunk); if (n < 0) break; out.write(chunk, 0, n); if (out.size() > MAX) throw BadBackup() }
             return of(out.toByteArray().decodeToString())
         }
     }
