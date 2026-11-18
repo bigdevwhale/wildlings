@@ -2,6 +2,8 @@ package app.wildling
 
 import android.app.Application
 import android.content.Context
+import androidx.room.withTransaction
+import app.wildling.data.Backup
 import app.wildling.data.Db
 import app.wildling.data.Habit
 import app.wildling.data.Mark
@@ -108,6 +110,20 @@ class AppContainer(context: Context) {
 
     suspend fun saveNote(n: Note) = lock.withLock { if (n.id == 0L) dao.insert(n) else dao.update(n) }
     suspend fun deleteNote(id: Long) = lock.withLock { dao.deleteNote(id) }
+
+    // ---------- a copy in a file ----------
+
+    suspend fun backup(): Backup = lock.withLock { Backup(dao.habitList(), dao.markList(), dao.urgeList(), dao.noteList(), settings.now()) }
+
+    /** Everything here gives way to what the file holds: all of it, or, if something fails, none of it. */
+    suspend fun restore(b: Backup) = lock.withLock {
+        db.withTransaction {
+            dao.clearMarks(); dao.clearUrges(); dao.clearNotes(); dao.clearHabits()
+            dao.insertHabits(b.habits); dao.insertMarks(b.marks); dao.insertUrges(b.urges); dao.insertNotes(b.notes)
+        }
+        settings.update { b.settings }
+        Money.set(b.settings.currency)
+    }
 
     // ---------- the garden and the lodge ----------
 

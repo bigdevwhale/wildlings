@@ -101,6 +101,16 @@ interface Wild {
     @Query("DELETE FROM Urge WHERE habitId = :id") suspend fun deleteUrgesOf(id: Long)
     @Query("DELETE FROM Mark WHERE habitId = :habit AND day = :day AND kind = :kind") suspend fun unmark(habit: Long, day: Long, kind: Int)
     @Query("DELETE FROM Note WHERE id = :id") suspend fun deleteNote(id: Long)
+
+    // a copy read back from a file: everything out, everything in
+    @Query("DELETE FROM Habit") suspend fun clearHabits()
+    @Query("DELETE FROM Mark") suspend fun clearMarks()
+    @Query("DELETE FROM Urge") suspend fun clearUrges()
+    @Query("DELETE FROM Note") suspend fun clearNotes()
+    @Insert suspend fun insertHabits(l: List<Habit>)
+    @Insert suspend fun insertMarks(l: List<Mark>)
+    @Insert suspend fun insertUrges(l: List<Urge>)
+    @Insert suspend fun insertNotes(l: List<Note>)
 }
 
 @Database(entities = [Habit::class, Mark::class, Urge::class, Note::class], version = 2, exportSchema = true,

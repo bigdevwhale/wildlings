@@ -1,5 +1,7 @@
 package app.wildling.ui.more
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +31,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.wildling.container
 import app.wildling.currentLanguage
+import app.wildling.data.BadBackup
+import app.wildling.data.Backup
 import app.wildling.domain.Money
 import app.wildling.domain.Shop
 import app.wildling.domain.tr
@@ -42,6 +46,8 @@ import app.wildling.ui.art.Prop
 import app.wildling.ui.components.Btn
 import app.wildling.ui.components.ChipRow
 import app.wildling.ui.components.Field
+import app.wildling.ui.components.Ghost
+import app.wildling.ui.components.Popup
 import app.wildling.ui.components.Page
 import app.wildling.ui.components.Row2
 import app.wildling.ui.components.Section
@@ -51,6 +57,8 @@ import app.wildling.ui.home.ConePill
 import app.wildling.ui.home.label
 import app.wildling.ui.theme.C
 import app.wildling.ui.theme.T
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** Pinecones buy seeds for the beds and things for the lodge; a thing tapped is tried on in the scene first. */
 @Composable
@@ -167,6 +175,53 @@ fun SettingsPage(d: Data, nav: Nav) {
         }
         Section(tr("Подсказки", "Hints"))
         Row2(tr("Показать знакомство с экранами заново", "Show the screen introductions again"), null) { c.write { settings.update { it.copy(seen = emptySet()) }; say(tr("Подсказки вернутся", "Hints will come back")) } }
+        Section(tr("Данные", "Data"))
+        Text(tr("Всё, что есть в приложении, одним файлом: чтобы перенести на другой телефон или сохранить на всякий случай.",
+            "Everything in the app as one file: to move to another phone or to keep just in case."), style = T.small)
+        val ctx = LocalContext.current
+        var found by remember { mutableStateOf<Backup?>(null) }
+        val failed = tr("Не получилось прочитать файл", "Couldn't read the file")
+        val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+            if (uri != null) c.write {
+                val ok = runCatching { val b = backup(); withContext(Dispatchers.IO) { Backup.write(app, uri, b) } }.isSuccess
+                say(if (ok) tr("Копия сохранена", "The copy is saved") else tr("Не получилось сохранить файл", "Couldn't save the file"))
+            }
+        }
+        val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            if (uri != null) c.write {
+                try { found = withContext(Dispatchers.IO) { Backup.read(app, uri) } }
+                catch (e: BadBackup) { say(if (e.newer) tr("Файл из более новой версии – обнови приложение", "The file is from a newer version – update the app") else tr("Это не копия Wildling", "This isn't a Wildling copy")) }
+                catch (e: Exception) { say(failed) }
+            }
+        }
+        Tap("scroll", tr("Сохранить копию в файл", "Save a copy to a file"), tr("привычки, дни, дневник, сторожка", "habits, days, the journal, the lodge")) {
+            runCatching { save.launch("wildling-${java.time.LocalDate.now()}.json") }.onFailure { c.say(tr("Не нашлось приложения для файлов", "No app for files was found")) }
+        }
+        // any type: file managers and messengers often don't know a .json for what it is
+        Tap("journal", tr("Восстановить из файла", "Restore from a file"), tr("заменит всё, что есть сейчас", "replaces everything here now")) {
+            runCatching { open.launch(arrayOf("*/*")) }.onFailure { c.say(tr("Не нашлось приложения для файлов", "No app for files was found")) }
+        }
+        found?.let { b ->
+            Popup({ found = null }) {
+                Text(tr("Заменить всё этим файлом?", "Replace everything with this file?"), style = T.h3)
+                val day = if (b.made > 0) java.time.Instant.ofEpochMilli(b.made).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+                    .format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)) else null
+                Text((if (day != null) tr("Копия от $day. ", "A copy from $day. ") else "") +
+                    tr("В ней привычек: ${b.habits.size}, записей в дневнике: ${b.notes.size}.", "It holds habits: ${b.habits.size}, journal notes: ${b.notes.size}."),
+                    style = T.small.copy(color = C.ink), modifier = Modifier.padding(top = 8.dp))
+                Text(tr("Всё, что сейчас есть в приложении, исчезнет, и вернуть это будет нельзя.", "Everything in the app now will be gone, and there is no way back."),
+                    style = T.small, modifier = Modifier.padding(top = 6.dp))
+                Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Ghost(tr("Отмена", "Cancel"), Modifier.weight(1f)) { found = null }
+                    Btn(tr("Заменить", "Replace"), Modifier.weight(1f), color = C.bad, ink = androidx.compose.ui.graphics.Color.White) {
+                        found = null
+                        c.write {
+                            if (runCatching { restore(b) }.isSuccess) { nav.stack.clear(); nav.tab = 0; say(tr("Всё на месте", "Everything is in place")) } else say(failed)
+                        }
+                    }
+                }
+            }
+        }
         Section(tr("Поддержать", "Support"))
         Text(tr("StillCraft держится на поддержке тех, кому нравятся эти приложения.", "StillCraft lives on the goodwill of people who like these apps."), style = T.small)
         Link("heart", tr("Поддержать разработку", "Support development"), null, Community.SUPPORT)
@@ -203,9 +258,15 @@ object Community {
 @Composable
 private fun Link(icon: String, title: String, sub: String?, url: String) {
     val ctx = LocalContext.current
-    Row(Modifier.fillMaxWidth().padding(top = 6.dp).card().clickable {
+    Tap(icon, title, sub) {
         runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
-    }.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    }
+}
+
+/** A row that does something: a pixel icon, a title and a line under it. */
+@Composable
+private fun Tap(icon: String, title: String, sub: String?, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 6.dp).card().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         app.wildling.ui.art.Ico(icon, 30.dp)
         Column(Modifier.weight(1f).padding(start = 12.dp)) { Text(title, style = T.bodyB); if (sub != null) Text(sub, style = T.small) }
         Text("›", style = T.h2.copy(color = C.mute))

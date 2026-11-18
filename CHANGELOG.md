@@ -6,6 +6,17 @@ line "<!-- tg", then 2-4 short lines in Russian for users (what is new, what is 
 then close it like any HTML comment. The release notes carry it, and the chat bot posts those lines.
 -->
 
+## [1.2.0] - 2026-11-18
+
+- **A copy in a file.** Settings → Data saves everything the app keeps – habits, days, cravings, the journal, the letter, the lodge and the garden – as one file, and reads it back. Move it to a new phone or keep it just in case. ([#4](https://github.com/bigdevwhale/wildlings/issues/4))
+- Restoring replaces what is in the app, so it first shows what the file holds and asks. A file that isn't a Wildling copy changes nothing.
+
+<!-- tg
+Wildling 1.2.0: перенос на другой телефон – по вашей просьбе из чата.
+В настройках появился раздел «Данные»: всё приложение сохраняется в один файл и восстанавливается из него.
+Привычки, дни, дневник, письмо, сторожка и грядки переезжают целиком.
+-->
+
 ## [1.1.0] - 2026-11-17
 
 - **Counted habits.** A good habit can now be counted in amounts instead of ticked: «5 glasses of water a day» or «1000 words a week». Put in how much was done each day – by steps or typed – and the day (or the week) counts once the goal adds up. A weekly amount brings the creature closer in proportion: half the words, half the week's steps. ([#1](https://github.com/bigdevwhale/wildlings/issues/1))
