@@ -6,6 +6,14 @@ line "<!-- tg", then 2-4 short lines in Russian for users (what is new, what is 
 then close it like any HTML comment. The release notes carry it, and the chat bot posts those lines.
 -->
 
+## [1.3.1] - 2026-11-19
+
+- **The creatures show up in Lingvale.** A creature met in the last few days came to the village as an egg, and the village hides eggs, so a young lodge stood empty. Now every creature walks there, from a shadow in the thicket to one asleep at your feet.
+
+<!-- tg
+Wildling: звери теперь видны в деревне Lingvale – даже те, что появились всего пару дней назад.
+-->
+
 ## [1.3.0] - 2026-11-18
 
 - **Lingvale can move Wildling to a new phone.** The village saves the copies of all the -ling apps into one file and loads them back on another phone. It is the same copy Settings → Data makes, and Wildling loads it only when you confirm it in Lingvale. A file from a newer Wildling is refused, as in the settings.

@@ -123,6 +123,12 @@ class VillageProvider : ContentProvider() {
         private fun color(c: Long) = "#%06X".format(c and 0xFFFFFF)
         private fun dayOf(ms: Long) = Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
 
+        /**
+         * The village counts 0 egg, 1 baby, 2 youngster, 3 grown, 4 master, and hides eggs; trust goes from 0 (a shadow
+         * in the thicket) to 5 (asleep at your feet). So a creature met in the last few days must not come as stage 0.
+         */
+        fun villageStage(trust: Int) = when { trust <= 1 -> 1; trust == 2 -> 2; trust == 3 -> 3; else -> 4 }
+
         /** Everything Lingvale shows of Wildling: the creatures (trust stages as growth), the days, the last week. */
         suspend fun snapshot(ctx: Context, c: AppContainer): JSONObject {
             val habits = c.dao.habitList().filter { !it.archived }
@@ -133,7 +139,7 @@ class VillageProvider : ContentProvider() {
                 val t = Engine.trust(h, marks, urges, today)
                 petsJson.put(JSONObject()
                     .put("id", h.id).put("species", h.kind).put("name", h.name)
-                    .put("stage", t.stage).put("progress", t.progress.toDouble())
+                    .put("stage", villageStage(t.stage)).put("progress", t.progress.toDouble())
                     .put("slot", if (i < 3) i else -1).put("shiny", h.shiny).put("found", h.since * 86400_000L).put("hatched", h.since * 86400_000L))
             }
             Engine.finds(habits, marks, urges, today).entries.forEachIndexed { i, (k, d) ->
