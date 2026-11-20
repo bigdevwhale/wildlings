@@ -6,6 +6,22 @@ line "<!-- tg", then 2-4 short lines in Russian for users (what is new, what is 
 then close it like any HTML comment. The release notes carry it, and the chat bot posts those lines.
 -->
 
+## [1.4.0] - 2026-11-20
+
+### Added
+- **A holiday from a good habit (#3):** ill, away or in need of a break, take 3, 7, 14 or 30 days off on the habit's page. Those weeks cost no trust and don't break the run of weeks; the card says till when, and you can come back early.
+- **Habits in your own order (#7):** a long press on a habit shows arrows to move it up or down within its group.
+
+### Fixed
+- On the day of a slip the count of clean days shows 0, not -1 (#6).
+- A good habit's bar on «Today» shows the week, as the number beside it says (#5); a bad habit's still shows the way to its next step.
+
+<!-- tg
+Отпуск от полезной привычки: заболел или уехал – эти недели не отнимают доверия и не прерывают серию
+Привычки можно расставить в своём порядке – долгое нажатие и стрелки
+Исправлено: в день срыва счётчик показывает 0, а не −1, и полоска недели совпадает с числом рядом
+-->
+
 ## [1.3.1] - 2026-11-19
 
 - **The creatures show up in Lingvale.** A creature met in the last few days came to the village as an egg, and the village hides eggs, so a young lodge stood empty. Now every creature walks there, from a shadow in the thicket to one asleep at your feet.
