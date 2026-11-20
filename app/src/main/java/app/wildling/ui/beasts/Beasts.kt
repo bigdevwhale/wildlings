@@ -242,6 +242,7 @@ fun HabitPage(id: Long, d: Data, nav: Nav) {
         }
         Section(tr("Две недели", "Two weeks"))
         Fortnight(h, d) { logDay = it }
+        if (!h.bad) Holiday(h, d)
         if (trust.history.size > 3) {
             Section(tr("Доверие", "Trust"))
             Column(Modifier.fillMaxWidth().card(18.dp).padding(14.dp)) {
@@ -358,5 +359,30 @@ fun KindPage(kind: String, d: Data, nav: Nav) {
             }
         } else if (found == null) Text(tr("Пока не в гостях. Как его встретить – написано выше.", "Not here yet. How to meet it is written above."),
             style = T.small, modifier = Modifier.padding(top = 10.dp))
+    }
+}
+
+/** A holiday from a good habit (#3): ill, away, a break. Those weeks cost no trust and don't break the run. */
+@Composable
+private fun Holiday(h: Habit, d: Data) {
+    val c = LocalContext.current.container
+    val until = Engine.restUntil(h, d.marks, d.today)
+    Section(tr("Отпуск", "Holiday"))
+    Column(Modifier.fillMaxWidth().card(18.dp).padding(14.dp)) {
+        if (until != null) {
+            Text(tr("${h.name} ждёт тебя до ${app.wildling.domain.fmtDayShort(until)}. Эти недели не отнимают доверия и не прерывают серию.",
+                "${h.name} waits for you till ${app.wildling.domain.fmtDayShort(until)}. These weeks cost no trust and don't break the run."), style = T.body)
+            Text(tr("Вернуться раньше", "Come back early"), style = T.smallB.copy(color = C.acc), modifier = Modifier.padding(top = 8.dp).clip(RoundedCornerShape(6.dp))
+                .clickable { c.write { endRest(h, d.today); say(tr("С возвращением!", "Welcome back!")) } }.padding(vertical = 4.dp))
+        } else {
+            Text(tr("Заболел, уехал или нужна передышка? Возьми отпуск – эти недели не отнимут доверия и не прервут серию.",
+                "Ill, away or need a break? Take a holiday – those weeks won't cost trust or break the run."), style = T.body)
+            Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(3, 7, 14, 30).forEach { n ->
+                    Text(tr("$n дн.", "$n d"), style = T.smallB.copy(color = C.ink), modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(C.card2)
+                        .clickable { c.write { rest(h, d.today, n); say(tr("Отпуск на $n дн.", "A holiday of $n days")) } }.padding(horizontal = 12.dp, vertical = 6.dp))
+                }
+            }
+        }
     }
 }

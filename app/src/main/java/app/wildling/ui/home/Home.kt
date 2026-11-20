@@ -1,5 +1,6 @@
 package app.wildling.ui.home
 
+import androidx.compose.foundation.combinedClickable
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -102,6 +103,7 @@ fun HomeScreen(d: Data, nav: Nav) {
     val c = LocalContext.current.container
     var slipFor by remember { mutableStateOf<Habit?>(null) }
     var logFor by remember { mutableStateOf<Habit?>(null) }
+    var arranging by remember { mutableStateOf(false) }
     // a creature that stepped back or is new: remember quietly where it is, so only steps forward make news
     LaunchedEffect(d.trust) {
         val quiet = d.active.mapNotNull { h -> val cur = d.trust[h.id]?.stage ?: 0; val told = d.s.stages[h.id]; if (told == null || cur < told) h.id to cur else null }.toMap()
@@ -117,21 +119,23 @@ fun HomeScreen(d: Data, nav: Nav) {
         Scenes(d, nav)
         Row(Modifier.fillMaxWidth().padding(top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(tr("СЕГОДНЯ", "TODAY"), style = T.sec, modifier = Modifier.weight(1f))
-            Text(tr("+ привычка", "+ habit"), style = T.smallB.copy(color = C.acc), modifier = Modifier.clip(RoundedCornerShape(50)).clickable { nav.push(Screen.Edit()) }.padding(4.dp))
+            if (arranging) Text(tr("Готово", "Done"), style = T.smallB.copy(color = C.acc), modifier = Modifier.clip(RoundedCornerShape(50)).clickable { arranging = false }.padding(4.dp))
+            else Text(tr("+ привычка", "+ habit"), style = T.smallB.copy(color = C.acc), modifier = Modifier.clip(RoundedCornerShape(50)).clickable { nav.push(Screen.Edit()) }.padding(4.dp))
         }
+        if (arranging) Text(tr("Стрелками поднимите привычку выше или опустите ниже, потом нажмите «Готово».", "Use the arrows to move a habit up or down, then tap Done."), style = T.tiny, modifier = Modifier.padding(bottom = 6.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (d.bad.isNotEmpty()) {
                 item(key = "h-bad") {
                     val holding = d.bad.count { !d.slipped(it) }
                     GroupHead("paw", tr("Дикие · не кормить", "Wild · don't feed"), tr("держатся $holding из ${d.bad.size}", "holding $holding of ${d.bad.size}"), C.acc)
                 }
-                items(d.bad, key = { it.id }) { h -> HabitRow(h, d, nav, onSlip = { slipFor = h }, onLog = {}) }
+                items(d.bad, key = { it.id }) { h -> if (arranging) ArrangeRow(h, d.bad, c) else HabitRow(h, d, nav, onSlip = { slipFor = h }, onLog = {}, onArrange = { arranging = true }) }
             }
             if (d.good.isNotEmpty()) {
                 item(key = "h-good") {
                     GroupHead("heart", tr("Пугливые · приманить", "Shy · lure them"), tr("сегодня ${d.good.count { d.done(it) }} из ${d.good.size}", "today ${d.good.count { d.done(it) }} of ${d.good.size}"), C.gold)
                 }
-                items(d.good, key = { it.id }) { h -> HabitRow(h, d, nav, onSlip = {}, onLog = { logFor = h }) }
+                items(d.good, key = { it.id }) { h -> if (arranging) ArrangeRow(h, d.good, c) else HabitRow(h, d, nav, onSlip = {}, onLog = { logFor = h }, onArrange = { arranging = true }) }
             }
             item(key = "note") { NoteCard(d, nav) }
             item(key = "pad") { Spacer(Modifier.height(8.dp)) }
@@ -153,12 +157,13 @@ private fun GroupHead(icon: String, title: String, sub: String, color: Color) {
 }
 
 @Composable
-private fun HabitRow(h: Habit, d: Data, nav: Nav, onSlip: () -> Unit, onLog: () -> Unit) {
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun HabitRow(h: Habit, d: Data, nav: Nav, onSlip: () -> Unit, onLog: () -> Unit, onArrange: () -> Unit = {}) {
     val c = LocalContext.current.container
     val tr0 = d.trust[h.id]
     val st = tr0?.stage ?: 0
     val edge = if (h.bad) C.acc else C.gold
-    Row(Modifier.fillMaxWidth().card(18.dp).clickable { nav.push(Screen.HabitInfo(h.id)) }.height(androidx.compose.foundation.layout.IntrinsicSize.Min),
+    Row(Modifier.fillMaxWidth().card(18.dp).combinedClickable(onLongClick = onArrange) { nav.push(Screen.HabitInfo(h.id)) }.height(androidx.compose.foundation.layout.IntrinsicSize.Min),
         verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.width(6.dp).fillMaxHeight().background(edge))
         Box(Modifier.padding(start = 8.dp).size(50.dp).clip(RoundedCornerShape(8.dp)).background(if (h.bad) Color(0xFF2B3A27).copy(alpha = if (st <= 1) .9f else .25f) else C.goldSoft),
@@ -167,8 +172,17 @@ private fun HabitRow(h: Habit, d: Data, nav: Nav, onSlip: () -> Unit, onLog: () 
         }
         Column(Modifier.weight(1f).padding(horizontal = 10.dp, vertical = 10.dp)) {
             Text(h.label(), style = T.bodyB, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text("${h.name} · ${Stages.name(st, h.bad).lowercase()}", style = T.tiny, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Meter(tr0?.progress ?: 0f, Modifier.padding(top = 6.dp), color = edge, h = 4.dp)
+            val off = if (h.bad) null else Engine.restUntil(h, d.marks, d.today)
+            Text("${h.name} · ${Stages.name(st, h.bad).lowercase()}" + (off?.let { tr(" · в отпуске до ${app.wildling.domain.fmtDayShort(it)}", " · on holiday till ${app.wildling.domain.fmtDayShort(it)}") } ?: ""),
+                style = T.tiny, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // a good habit's bar is its week, like the number beside it (#5); a bad one's, the way to its next step
+            val bar = when {
+                h.bad -> tr0?.progress ?: 0f
+                h.counts && h.weekly -> app.wildling.domain.weekStart(d.today).let { Engine.amount(h, d.marks, it, it + 6) } / h.goal.toFloat()
+                h.counts -> Engine.amount(h, d.marks, d.today) / h.goal.toFloat()
+                else -> Engine.thisWeek(h, d.marks, d.today) / h.perWeek.coerceIn(1, 7).toFloat()
+            }
+            Meter(bar.coerceIn(0f, 1f), Modifier.padding(top = 6.dp), color = edge, h = 4.dp)
         }
         if (h.bad) {
             Column(Modifier.padding(end = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -376,5 +390,22 @@ fun Scenes(d: Data, nav: Nav) {
         .border(2.dp, C.frame, RoundedCornerShape(topEnd = 8.dp, bottomStart = 8.dp, bottomEnd = 8.dp))) { page ->
         app.wildling.ui.art.LodgeScene(app.wildling.ui.art.View.entries[page], d.guests, d.s.items, d.beds,
             onGuest = { g -> if (g.key > 0) nav.push(Screen.HabitInfo(g.key)) else nav.push(Screen.KindInfo(g.kind)) }, onBed = { nav.push(Screen.Shop) })
+    }
+}
+
+/** A habit in the arranging mode (#7): its name and two arrows to move it within its group. */
+@Composable
+private fun ArrangeRow(h: Habit, group: List<Habit>, c: app.wildling.AppContainer) {
+    val i = group.indexOfFirst { it.id == h.id }
+    fun move(to: Int) {
+        if (to !in group.indices) return
+        val ids = group.map { it.id }.toMutableList(); ids.add(to, ids.removeAt(i))
+        c.write { reorder(ids) }
+    }
+    Row(Modifier.fillMaxWidth().card(18.dp).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Mini(h.kind, 34.dp, frame = 1)
+        Text(h.label(), style = T.bodyB, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(start = 10.dp))
+        Text("▲", style = T.h3.copy(color = if (i > 0) C.ink else C.line), modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(enabled = i > 0) { move(i - 1) }.padding(horizontal = 12.dp, vertical = 4.dp))
+        Text("▼", style = T.h3.copy(color = if (i < group.lastIndex) C.ink else C.line), modifier = Modifier.clip(RoundedCornerShape(6.dp)).clickable(enabled = i < group.lastIndex) { move(i + 1) }.padding(horizontal = 12.dp, vertical = 4.dp))
     }
 }

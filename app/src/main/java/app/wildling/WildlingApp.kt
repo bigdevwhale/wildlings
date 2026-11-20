@@ -64,6 +64,14 @@ class AppContainer(context: Context) {
 
     suspend fun archive(h: Habit, on: Boolean) = lock.withLock { dao.update(h.copy(archived = on)) }
     suspend fun deleteHabit(id: Long) = lock.withLock { dao.deleteMarksOf(id); dao.deleteUrgesOf(id); dao.deleteHabit(id) }
+    /** A holiday of [days] days from [from] for a good habit (#3): those weeks cost nothing and keep the run. */
+    suspend fun rest(h: Habit, from: Long, days: Int) = lock.withLock {
+        val have = dao.markList().filter { it.habitId == h.id && it.kind == Mark.REST }.map { it.day }.toSet()
+        dao.insertMarks((from until from + days).filter { it !in have }.map { Mark(habitId = h.id, day = it, kind = Mark.REST) })
+    }
+    /** Back from a holiday: the days off after [day] are taken back. */
+    suspend fun endRest(h: Habit, day: Long) = lock.withLock { dao.endRest(h.id, day) }
+
     suspend fun reorder(ids: List<Long>) = lock.withLock { val all = dao.habitList().associateBy { it.id }; ids.forEachIndexed { i, id -> all[id]?.let { dao.update(it.copy(order = i)) } } }
 
     // ---------- days ----------

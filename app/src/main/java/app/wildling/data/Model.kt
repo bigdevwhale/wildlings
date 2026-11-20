@@ -48,11 +48,11 @@ data class Mark(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val habitId: Long,
     val day: Long,
-    val kind: Int,               // SLIP, DONE or LOG
+    val kind: Int,               // SLIP, DONE, LOG or REST
     val at: Long = System.currentTimeMillis(),
     /** A LOG: how much of a counted habit was done that day, in all. */
     @ColumnInfo(defaultValue = "0") val amount: Int = 0,
-) { companion object { const val SLIP = 1; const val DONE = 2; const val LOG = 3 } }
+) { companion object { const val SLIP = 1; const val DONE = 2; const val LOG = 3; const val REST = 4 } }
 
 /** «It came»: a craving lived through by the window, held or not. */
 @Entity
@@ -101,6 +101,8 @@ interface Wild {
     @Query("DELETE FROM Urge WHERE habitId = :id") suspend fun deleteUrgesOf(id: Long)
     @Query("DELETE FROM Mark WHERE habitId = :habit AND day = :day AND kind = :kind") suspend fun unmark(habit: Long, day: Long, kind: Int)
     @Query("DELETE FROM Note WHERE id = :id") suspend fun deleteNote(id: Long)
+    /** Ends a holiday: the days off after [day] are taken back (#3). */
+    @Query("DELETE FROM Mark WHERE habitId = :habit AND kind = 4 AND day > :day") suspend fun endRest(habit: Long, day: Long)
 
     // a copy read back from a file: everything out, everything in
     @Query("DELETE FROM Habit") suspend fun clearHabits()

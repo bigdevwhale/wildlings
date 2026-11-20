@@ -39,6 +39,7 @@ object Engine {
         } else if (h.counts && h.weekly) {
             // so much a week: each amount brings its share of the week's seven steps, what goes past the goal a little more
             val logs = mine.filter { it.kind == Mark.LOG }.associate { it.day to it.amount }
+            val rest = rests(h, marks)
             val goal = h.goal.toDouble()
             var sum = 0.0
             val firstWeek = weekStart(h.since)
@@ -47,11 +48,12 @@ object Engine {
                 val a = (logs[d] ?: 0).toDouble()
                 if (a > 0) { p += 7.0 * (minOf(sum + a, goal) - minOf(sum, goal)) / goal; if (sum + a > goal) p += .5; sum += a }
                 p += .5 * minOf(2, held[d] ?: 0)
-                if (weekStart(d) + 6 == d && weekStart(d) != firstWeek && d < today && sum < goal / 2) p *= WEEK_KEEP
+                if (weekStart(d) + 6 == d && weekStart(d) != firstWeek && d < today && sum < goal / 2 && !restWeek(rest, weekStart(d))) p *= WEEK_KEEP
                 hist += d to p; best = max(best, Stages.of(p))
             }
         } else {
             val done = mine.filter { it.kind == Mark.DONE }.map { it.day }.toSet()
+            val rest = rests(h, marks)
             val per = h.perWeek.coerceIn(1, 7)
             val step = 7.0 / per
             var weekCount = 0
@@ -61,7 +63,7 @@ object Engine {
                 if (d in done) { weekCount++; p += if (weekCount <= per) step else .5 }
                 p += .5 * minOf(2, held[d] ?: 0)
                 // a week that just ended (Sunday, and not the first, partial one)
-                if (weekStart(d) + 6 == d && weekStart(d) != firstWeek && d < today && weekCount < ceil(per / 2.0)) p *= WEEK_KEEP
+                if (weekStart(d) + 6 == d && weekStart(d) != firstWeek && d < today && weekCount < ceil(per / 2.0) && !restWeek(rest, weekStart(d))) p *= WEEK_KEEP
                 hist += d to p; best = max(best, Stages.of(p))
             }
         }
@@ -71,12 +73,19 @@ object Engine {
     // ---------- streaks and sums ----------
 
     fun slips(h: Habit, marks: List<Mark>) = marks.filter { it.habitId == h.id && it.kind == Mark.SLIP }.map { it.day }.toSortedSet()
+    /** Days off of a good habit (#3): a holiday, an illness. */
+    fun rests(h: Habit, marks: List<Mark>) = marks.filter { it.habitId == h.id && it.kind == Mark.REST }.map { it.day }.toSortedSet()
+    /** A week mostly off: it neither costs trust nor breaks the run of weeks. */
+    fun restWeek(rest: Set<Long>, w: Long) = (w..w + 6).count { it in rest } >= 4
+    /** The last day of the holiday [day] is in, or null. */
+    fun restUntil(h: Habit, marks: List<Mark>, day: Long): Long? { val r = rests(h, marks); if (day !in r) return null; var d = day; while (d + 1 in r) d++; return d }
     fun dones(h: Habit, marks: List<Mark>) = marks.filter { it.habitId == h.id && it.kind == Mark.DONE }.map { it.day }.toSortedSet()
 
     /** A bad habit: whole days since the last slip (or the start). */
     fun streak(h: Habit, marks: List<Mark>, today: Long): Long {
         val last = slips(h, marks).lastOrNull { it <= today }
-        return today - max(h.since, if (last != null) last + 1 else h.since)
+        // on the day of a slip the run starts again from nought (#6), never below it
+        return max(0L, today - max(h.since, if (last != null) last + 1 else h.since))
     }
 
     /** The longest clean run of a bad habit, in whole days. */
@@ -93,10 +102,12 @@ object Engine {
     fun weeksInRow(h: Habit, marks: List<Mark>, today: Long): Int {
         val done = dones(h, marks); val per = h.perWeek.coerceIn(1, 7)
         val met: (Long) -> Boolean = if (h.counts && h.weekly) { w -> amount(h, marks, w, w + 6) >= h.goal } else { w -> done.count { it in w..w + 6 } >= per }
+        val rest = rests(h, marks)
         var w = weekStart(today); var n = 0
         if (met(w)) n++
         w -= 7
-        while (w + 6 >= h.since) { if (met(w)) n++ else break; w -= 7 }
+        // a week off on holiday is stepped over: it neither breaks the run nor counts in it (#3)
+        while (w + 6 >= h.since) { if (met(w)) n++ else if (!restWeek(rest, w)) break; w -= 7 }
         return n
     }
 
