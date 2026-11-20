@@ -6,6 +6,16 @@ line "<!-- tg", then 2-4 short lines in Russian for users (what is new, what is 
 then close it like any HTML comment. The release notes carry it, and the chat bot posts those lines.
 -->
 
+## [1.4.1] - 2026-11-20
+
+### Fixed
+- **A counted habit can be made again.** On «How to keep track?» the amount box showed a grey «5» that was only a hint, so «Next» stayed off with no word why. Now «Count how much» puts in a real 5 to change, and an empty box says a number is needed.
+
+<!-- tg
+Исправлено: измеримую привычку снова можно завести – на шаге «Как отмечать?» уже стоит число 5, его можно поменять
+Если поле пустое, приложение подскажет вписать число
+-->
+
 ## [1.4.0] - 2026-11-20
 
 ### Added

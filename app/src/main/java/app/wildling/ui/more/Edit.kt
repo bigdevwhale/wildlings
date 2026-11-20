@@ -260,13 +260,15 @@ private fun ColumnScope.WhenStep(f: Draft, today: Long) {
             "A shy creature cares about rhythm, not perfection. An honest three beats an impossible seven."))
         Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Chip(tr("Сделал или нет", "Done or not"), !f.counts, color = C.gold) { f.counts = false }
-            Chip(tr("Считать сколько", "Count how much"), f.counts, color = C.gold) { f.counts = true }
+            // a real 5, not a grey hint: an empty box that looks filled kept «Next» off with no word why
+            Chip(tr("Считать сколько", "Count how much"), f.counts, color = C.gold) { f.counts = true; if (f.goal.isEmpty()) f.goal = "5" }
         }
         if (f.counts) {
             Row(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Field(f.goal, { v -> f.goal = v.filter { it.isDigit() }.take(7) }, "5", Modifier.width(96.dp), number = true, center = true)
                 Field(f.unit, { f.unit = it.take(24) }, tr("стаканов, слов, минут", "glasses, words, minutes"), Modifier.weight(1f))
             }
+            if (!f.goalOk) Text(tr("Впиши число – сколько нужно набрать.", "Put in a number – how much to reach."), style = T.tiny.copy(color = C.bad), modifier = Modifier.padding(top = 4.dp))
             Row(Modifier.padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Chip(tr("в день", "a day"), !f.weekly, color = C.gold) { f.weekly = false }
                 Chip(tr("в неделю", "a week"), f.weekly, color = C.gold) { f.weekly = true }
